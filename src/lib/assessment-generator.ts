@@ -31,8 +31,7 @@ export async function generateAdaptiveAssessment(
   subject: string,
   levels: Level[]
 ): Promise<AdaptiveAssessmentPool> {
-  const levelList = levels.map((l) => `- ${l.name} (ID: ${l.id})`).join('
-')
+  const levelList = levels.map((l) => `- ${l.name} (ID: ${l.id})`).join('\n')
   const totalQuestions = QUESTIONS_PER_LEVEL * levels.length
 
   const prompt = `Generate an adaptive placement assessment pool for ${subject} with ${totalQuestions} questions.
