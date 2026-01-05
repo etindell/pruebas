@@ -1,6 +1,6 @@
 import { generateJSON } from './anthropic'
 
-interface AssessmentQuestion {
+export interface AssessmentQuestion {
   id: string
   question: string
   options: string[]
@@ -14,25 +14,33 @@ interface AssessmentResponse {
   questions: AssessmentQuestion[]
 }
 
-interface Level {
+export interface Level {
   id: string
   name: string
+  sortOrder: number
 }
 
-export async function generateAssessment(
+export interface AdaptiveAssessmentPool {
+  questionsByLevel: Record<string, AssessmentQuestion[]>
+  levels: Level[]
+}
+
+const QUESTIONS_PER_LEVEL = 3
+
+export async function generateAdaptiveAssessment(
   subject: string,
   levels: Level[]
-): Promise<AssessmentQuestion[]> {
-  const levelList = levels.map((l) => `- ${l.name} (ID: ${l.id})`).join('\n')
-  const questionsPerLevel = Math.ceil(18 / levels.length)
+): Promise<AdaptiveAssessmentPool> {
+  const levelList = levels.map((l) => `- ${l.name} (ID: ${l.id})`).join('
+')
+  const totalQuestions = QUESTIONS_PER_LEVEL * levels.length
 
-  const prompt = `Generate a placement assessment for ${subject} with ${questionsPerLevel * levels.length} questions.
+  const prompt = `Generate an adaptive placement assessment pool for ${subject} with ${totalQuestions} questions.
 
 The levels for this subject, in order from beginner to advanced, are:
 ${levelList}
 
-Include ${questionsPerLevel} questions from each level. Tag each question with its level name and level_id.
-Order questions from easiest (lowest level) to hardest (highest level).
+Generate exactly ${QUESTIONS_PER_LEVEL} questions for EACH level. Tag each question with its level name and level_id.
 
 Return JSON in this exact format:
 {
@@ -49,9 +57,32 @@ Return JSON in this exact format:
   ]
 }
 
-Make questions genuinely diagnostic of that level's skills. Multiple choice with 4 options each.
-Generate exactly ${questionsPerLevel * levels.length} questions with IDs q1, q2, q3, etc.`
+Important:
+- Make questions genuinely diagnostic of that specific level skills
+- Each question must have exactly 4 options
+- Questions for each level should vary in topic/skill tested
+- Generate exactly ${totalQuestions} questions total (${QUESTIONS_PER_LEVEL} per level)
+- Use IDs q1, q2, q3, etc.`
 
   const response = await generateJSON<AssessmentResponse>(prompt)
-  return response.questions
+
+  // Organize questions by level_id
+  const questionsByLevel: Record<string, AssessmentQuestion[]> = {}
+
+  // Initialize empty arrays for each level
+  for (const level of levels) {
+    questionsByLevel[level.id] = []
+  }
+
+  // Sort questions into their level buckets
+  for (const question of response.questions) {
+    if (questionsByLevel[question.level_id]) {
+      questionsByLevel[question.level_id].push(question)
+    }
+  }
+
+  return {
+    questionsByLevel,
+    levels,
+  }
 }

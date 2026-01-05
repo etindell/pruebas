@@ -2,23 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 
-interface Question {
-  id: string
-  correct_answer: string
-  level: string
-  level_id: string
-}
-
-interface Answer {
+interface AdaptiveAnswer {
   question_id: string
   selected_answer: string
-}
-
-interface LevelScore {
+  is_correct: boolean
   level_id: string
   level_name: string
-  correct: number
-  total: number
 }
 
 export async function GET(
@@ -67,8 +56,8 @@ export async function POST(
     }
 
     const { id } = await params
-    const { answers } = await request.json() as { answers: Answer[] }
-
+    const body = await request.json()
+    
     const assessment = await prisma.assessment.findUnique({
       where: { id },
       include: {
@@ -92,74 +81,46 @@ export async function POST(
       return NextResponse.json({ error: 'Assessment already completed' }, { status: 400 })
     }
 
-    // Calculate scores
-    const questions = JSON.parse(assessment.questions).questions as Question[]
-    const levelScores: Record<string, LevelScore> = {}
+    // Handle adaptive assessment format
+    const { answers, finalLevelId, startingLevelId } = body as {
+      answers: AdaptiveAnswer[]
+      finalLevelId: string
+      startingLevelId: string
+    }
 
-    // Initialize scores for all levels
-    assessment.subject.levels.forEach((level) => {
-      levelScores[level.id] = {
-        level_id: level.id,
-        level_name: level.name,
-        correct: 0,
-        total: 0,
+    // Calculate per-level stats from the adaptive answers
+    const levelStats: Record<string, { correct: number; total: number; level_name: string }> = {}
+    
+    for (const answer of answers) {
+      if (!levelStats[answer.level_id]) {
+        levelStats[answer.level_id] = { correct: 0, total: 0, level_name: answer.level_name }
       }
-    })
-
-    // Calculate per-level scores
-    questions.forEach((q) => {
-      const answer = answers.find((a) => a.question_id === q.id)
-      const levelId = q.level_id
-
-      if (levelScores[levelId]) {
-        levelScores[levelId].total++
-        if (answer?.selected_answer === q.correct_answer) {
-          levelScores[levelId].correct++
-        }
-      }
-    })
-
-    const scores = Object.values(levelScores).filter((s) => s.total > 0)
-
-    // Find suggested level: one level above highest level with >= 70%
-    let suggestedLevelId: string | null = null
-    const sortedLevels = assessment.subject.levels
-
-    for (let i = sortedLevels.length - 1; i >= 0; i--) {
-      const level = sortedLevels[i]
-      const score = levelScores[level.id]
-
-      if (score && score.total > 0) {
-        const percentage = (score.correct / score.total) * 100
-
-        if (percentage >= 70) {
-          // Suggest the next level, or this one if it's the highest
-          suggestedLevelId = sortedLevels[i + 1]?.id || level.id
-          break
-        }
+      levelStats[answer.level_id].total++
+      if (answer.is_correct) {
+        levelStats[answer.level_id].correct++
       }
     }
 
-    // If no level reached 70%, suggest the first level
-    if (!suggestedLevelId) {
-      suggestedLevelId = sortedLevels[0]?.id || null
-    }
+    const scores = Object.entries(levelStats).map(([level_id, stats]) => ({
+      level_id,
+      level_name: stats.level_name,
+      correct: stats.correct,
+      total: stats.total,
+    }))
 
-    // Process answers for storage
-    const processedAnswers = answers.map((a) => {
-      const q = questions.find((q) => q.id === a.question_id)
-      return {
-        question_id: a.question_id,
-        selected_answer: a.selected_answer,
-        is_correct: q?.correct_answer === a.selected_answer,
-      }
-    })
+    // For adaptive assessment, suggested level is the final level
+    const suggestedLevelId = finalLevelId
 
     // Update assessment
     const updatedAssessment = await prisma.assessment.update({
       where: { id },
       data: {
-        answers: JSON.stringify({ answers: processedAnswers }),
+        answers: JSON.stringify({
+          type: 'adaptive',
+          answers,
+          startingLevelId,
+          finalLevelId,
+        }),
         scoreByLevel: JSON.stringify({ scores }),
         suggestedLevelId,
         completedAt: new Date(),
@@ -169,7 +130,7 @@ export async function POST(
       },
     })
 
-    // Update user's subject level
+    // Update user subject level
     if (suggestedLevelId) {
       await prisma.userSubjectLevel.upsert({
         where: {
@@ -192,10 +153,16 @@ export async function POST(
       })
     }
 
+    // Find starting and final level names
+    const startingLevel = assessment.subject.levels.find((l) => l.id === startingLevelId)
+    const finalLevel = assessment.subject.levels.find((l) => l.id === finalLevelId)
+
     return NextResponse.json({
       assessment: updatedAssessment,
       scores,
       suggestedLevel: updatedAssessment.suggestedLevel,
+      startingLevel: startingLevel ? { id: startingLevel.id, name: startingLevel.name } : null,
+      finalLevel: finalLevel ? { id: finalLevel.id, name: finalLevel.name } : null,
     })
   } catch (error) {
     console.error('Submit assessment error:', error)

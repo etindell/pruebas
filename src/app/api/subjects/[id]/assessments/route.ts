@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { generateAssessment } from '@/lib/assessment-generator'
+import { generateAdaptiveAssessment } from '@/lib/assessment-generator'
 
 export async function GET(
   request: NextRequest,
@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession()
-    if (!session.userId) {
+    if (\!session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -39,11 +39,20 @@ export async function POST(
 ) {
   try {
     const session = await getSession()
-    if (!session.userId) {
+    if (\!session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id: subjectId } = await params
+    
+    // Get optional starting level from request body
+    let startingLevelId: string | null = null
+    try {
+      const body = await request.json()
+      startingLevelId = body.startingLevelId || null
+    } catch {
+      // No body or invalid JSON, use default
+    }
 
     const subject = await prisma.subject.findUnique({
       where: { id: subjectId },
@@ -52,26 +61,46 @@ export async function POST(
       },
     })
 
-    if (!subject) {
+    if (\!subject) {
       return NextResponse.json({ error: 'Subject not found' }, { status: 404 })
     }
 
-    // Generate assessment questions
-    const questions = await generateAssessment(
+    // Generate adaptive assessment question pool
+    const pool = await generateAdaptiveAssessment(
       subject.name,
-      subject.levels.map((l) => ({ id: l.id, name: l.name }))
+      subject.levels.map((l) => ({ id: l.id, name: l.name, sortOrder: l.sortOrder }))
     )
 
-    // Create assessment
+    // Determine starting level index
+    let startingLevelIndex = Math.floor(subject.levels.length / 2) // Default to middle
+    if (startingLevelId) {
+      const idx = subject.levels.findIndex((l) => l.id === startingLevelId)
+      if (idx \!== -1) {
+        startingLevelIndex = idx
+      }
+    }
+
+    // Create assessment with pool data
     const assessment = await prisma.assessment.create({
       data: {
         userId: session.userId,
         subjectId,
-        questions: JSON.stringify({ questions }),
+        questions: JSON.stringify({
+          type: 'adaptive',
+          questionsByLevel: pool.questionsByLevel,
+          startingLevelId: subject.levels[startingLevelIndex].id,
+          startingLevelIndex,
+        }),
       },
     })
 
-    return NextResponse.json({ assessment, questions })
+    return NextResponse.json({
+      assessment,
+      questionsByLevel: pool.questionsByLevel,
+      levels: subject.levels.map((l) => ({ id: l.id, name: l.name, sortOrder: l.sortOrder })),
+      startingLevelIndex,
+      startingLevelId: subject.levels[startingLevelIndex].id,
+    })
   } catch (error) {
     console.error('Create assessment error:', error)
     return NextResponse.json({ error: 'Failed to create assessment' }, { status: 500 })
