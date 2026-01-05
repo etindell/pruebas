@@ -4,7 +4,7 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-export const MODEL = 'claude-3-opus-20240229'
+export const MODEL = 'claude-opus-4-5-20251101'
 
 export async function generateJSON<T>(prompt: string, maxRetries = 3): Promise<T> {
   let lastError: Error | null = null
