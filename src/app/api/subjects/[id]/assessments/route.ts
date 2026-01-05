@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession()
-    if (\!session.userId) {
+    if (!session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -39,7 +39,7 @@ export async function POST(
 ) {
   try {
     const session = await getSession()
-    if (\!session.userId) {
+    if (!session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -61,7 +61,7 @@ export async function POST(
       },
     })
 
-    if (\!subject) {
+    if (!subject) {
       return NextResponse.json({ error: 'Subject not found' }, { status: 404 })
     }
 
@@ -75,7 +75,7 @@ export async function POST(
     let startingLevelIndex = Math.floor(subject.levels.length / 2) // Default to middle
     if (startingLevelId) {
       const idx = subject.levels.findIndex((l) => l.id === startingLevelId)
-      if (idx \!== -1) {
+      if (idx !== -1) {
         startingLevelIndex = idx
       }
     }
