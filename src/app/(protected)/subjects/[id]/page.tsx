@@ -175,16 +175,22 @@ export default function SubjectPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="flex space-x-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Link
+          href={`/subjects/${subjectId}/learn`}
+          className="bg-green-600 text-white py-3 px-4 rounded-lg text-center hover:bg-green-700"
+        >
+          Generate Lesson
+        </Link>
         <Link
           href={`/quiz/create?subjectId=${subjectId}${selectedLevelId ? `&levelId=${selectedLevelId}` : ''}`}
-          className="flex-1 bg-blue-600 text-white py-3 px-4 rounded-lg text-center hover:bg-blue-700"
+          className="bg-blue-600 text-white py-3 px-4 rounded-lg text-center hover:bg-blue-700"
         >
           Create Quiz
         </Link>
         <Link
           href={`/browse?subjectId=${subjectId}`}
-          className="flex-1 border border-gray-300 py-3 px-4 rounded-lg text-center hover:bg-gray-50"
+          className="border border-gray-300 py-3 px-4 rounded-lg text-center hover:bg-gray-50"
         >
           Browse Quizzes
         </Link>
