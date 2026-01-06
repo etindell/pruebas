@@ -17,9 +17,7 @@ export async function generateJSON<T>(prompt: string, maxRetries = 3): Promise<T
         messages: [
           {
             role: 'user',
-            content: prompt + '
-
-IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no extra text.',
+            content: prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no extra text.",
           },
         ],
       })
