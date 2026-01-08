@@ -1,6 +1,38 @@
+'use client'
+
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function LandingPage() {
+  const router = useRouter()
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me')
+        const data = await res.json()
+        if (data.user) {
+          router.push('/dashboard')
+          return
+        }
+      } catch {
+        // Not logged in, show landing page
+      }
+      setChecking(false)
+    }
+    checkAuth()
+  }, [router])
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       {/* Navigation */}

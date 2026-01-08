@@ -31,7 +31,7 @@ export default function Header({ user }: HeaderProps) {
             </Link>
             <nav className="hidden md:flex space-x-4">
               <Link
-                href="/"
+                href="/dashboard"
                 className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
               >
                 Dashboard
