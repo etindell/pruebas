@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Family Quiz App",
-  description: "A family quiz app with AI-generated questions",
+  title: "Pruebas",
+  description: "AI-powered learning platform with adaptive quizzes and personalized lessons",
 };
 
 export default function RootLayout({
