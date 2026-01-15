@@ -6,9 +6,15 @@ import { generateAllLessonsForSubtopic } from '@/lib/lesson-generator'
 // POST /api/admin/seed-lessons - Start lesson seeding
 export async function POST(request: Request) {
   try {
-    const session = await getSession()
-    if (!session.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Allow authentication via session or admin secret key
+    const adminKey = request.headers.get('x-admin-key')
+    const validAdminKey = process.env.SESSION_SECRET // Reuse session secret as admin key
+
+    if (adminKey !== validAdminKey) {
+      const session = await getSession()
+      if (!session.userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
     }
 
     // Get optional subtopicId from body for targeted seeding
@@ -156,11 +162,17 @@ export async function POST(request: Request) {
 }
 
 // GET /api/admin/seed-lessons - Check seeding status
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await getSession()
-    if (!session.userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // Allow authentication via session or admin secret key
+    const adminKey = request.headers.get('x-admin-key')
+    const validAdminKey = process.env.SESSION_SECRET
+
+    if (adminKey !== validAdminKey) {
+      const session = await getSession()
+      if (!session.userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
     }
 
     const totalSubtopics = await prisma.subtopic.count()
