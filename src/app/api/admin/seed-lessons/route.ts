@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { generateLessonsForSubtopic } from '@/lib/lesson-generator'
+import { generateAllLessonsForSubtopic } from '@/lib/lesson-generator'
 
 // POST /api/admin/seed-lessons - Start lesson seeding
 export async function POST(request: Request) {
@@ -40,12 +40,13 @@ export async function POST(request: Request) {
         })
       }
 
-      const lessons = await generateLessonsForSubtopic(
-        subtopic.id,
-        subtopic.name,
-        subtopic.level.name,
-        subtopic.level.subject.name
-      )
+      const lessons = await generateAllLessonsForSubtopic({
+        subjectName: subtopic.level.subject.name,
+        levelName: subtopic.level.name,
+        subtopicName: subtopic.name,
+        subtopicPrompt: subtopic.prompt,
+        lessonCount: 4,
+      })
 
       // Save lessons to database
       for (let i = 0; i < lessons.length; i++) {
@@ -99,12 +100,13 @@ export async function POST(request: Request) {
 
     for (const subtopic of subtopics) {
       try {
-        const lessons = await generateLessonsForSubtopic(
-          subtopic.id,
-          subtopic.name,
-          subtopic.level.name,
-          subtopic.level.subject.name
-        )
+        const lessons = await generateAllLessonsForSubtopic({
+          subjectName: subtopic.level.subject.name,
+          levelName: subtopic.level.name,
+          subtopicName: subtopic.name,
+          subtopicPrompt: subtopic.prompt,
+          lessonCount: 4,
+        })
 
         // Save lessons to database
         for (let i = 0; i < lessons.length; i++) {
