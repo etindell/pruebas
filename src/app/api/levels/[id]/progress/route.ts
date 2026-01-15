@@ -8,6 +8,8 @@ interface SubtopicScore {
   score: number
   questionsAnswered: number
   passed: boolean
+  totalLessons: number
+  completedLessons: number
 }
 
 // Calculate trailing 40 question score for a subtopic
@@ -97,16 +99,32 @@ export async function GET(
       return NextResponse.json({ error: 'Level not found' }, { status: 404 })
     }
 
-    // Calculate trailing-40 scores for each subtopic
+    // Calculate trailing-40 scores and lesson progress for each subtopic
     const subtopicScores: SubtopicScore[] = await Promise.all(
       level.subtopics.map(async (subtopic) => {
         const { score, count } = await getTrailing40Score(userId, subtopic.id)
+
+        // Get lesson counts
+        const totalLessons = await prisma.lesson.count({
+          where: { subtopicId: subtopic.id },
+        })
+
+        const completedLessons = await prisma.lessonProgress.count({
+          where: {
+            userId,
+            lesson: { subtopicId: subtopic.id },
+            completed: true,
+          },
+        })
+
         return {
           id: subtopic.id,
           name: subtopic.name,
           score,
           questionsAnswered: count,
           passed: score > 90,
+          totalLessons,
+          completedLessons,
         }
       })
     )

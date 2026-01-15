@@ -29,6 +29,8 @@ interface SubtopicScore {
   score: number
   questionsAnswered: number
   passed: boolean
+  totalLessons: number
+  completedLessons: number
 }
 
 interface Progress {
@@ -415,6 +417,17 @@ export default function SubjectPage() {
                 </div>
 
                 <div className="flex items-center space-x-4">
+                  {/* Lesson Progress */}
+                  {subtopic.totalLessons > 0 && (
+                    <div className="text-xs text-gray-500 w-16 text-center">
+                      <span className={subtopic.completedLessons === subtopic.totalLessons ? 'text-green-600 font-medium' : ''}>
+                        {subtopic.completedLessons}/{subtopic.totalLessons}
+                      </span>
+                      <br />lessons
+                    </div>
+                  )}
+
+                  {/* Quiz Score */}
                   <div className="w-24 flex items-center space-x-2">
                     <div className="flex-1 bg-gray-200 rounded-full h-2">
                       <div
@@ -433,13 +446,24 @@ export default function SubjectPage() {
                     </span>
                   </div>
 
-                  <button
-                    onClick={() => startSubtopicQuiz(subtopic.id)}
-                    disabled={creatingQuiz === subtopic.id}
-                    className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {creatingQuiz === subtopic.id ? '...' : 'Quiz'}
-                  </button>
+                  {/* Action Buttons */}
+                  <div className="flex items-center space-x-2">
+                    {subtopic.totalLessons > 0 && (
+                      <Link
+                        href={`/subtopics/${subtopic.id}/lessons`}
+                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                      >
+                        Learn
+                      </Link>
+                    )}
+                    <button
+                      onClick={() => startSubtopicQuiz(subtopic.id)}
+                      disabled={creatingQuiz === subtopic.id}
+                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {creatingQuiz === subtopic.id ? '...' : 'Quiz'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
