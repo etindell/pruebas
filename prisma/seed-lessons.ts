@@ -8,6 +8,8 @@ const prisma = new PrismaClient()
 const CHECKPOINT_FILE = path.join(__dirname, 'lesson-seed-checkpoint.json')
 const CONCURRENT_SUBTOPICS = 3
 const DELAY_BETWEEN_BATCHES_MS = 2000
+// Limit how many subtopics to process per run (for deployment builds)
+const MAX_SUBTOPICS_PER_RUN = parseInt(process.env.SEED_LIMIT || '0') || Infinity
 
 interface Checkpoint {
   completedSubtopicIds: string[]
@@ -114,7 +116,11 @@ async function main() {
 
   console.log(`Total subtopics: ${subtopics.length}`)
   console.log(`Pending subtopics: ${pendingSubtopics.length}`)
+  console.log(`Max per run: ${MAX_SUBTOPICS_PER_RUN === Infinity ? 'unlimited' : MAX_SUBTOPICS_PER_RUN}`)
   console.log('')
+
+  // Limit subtopics to process in this run
+  const subtopicsToProcess = pendingSubtopics.slice(0, MAX_SUBTOPICS_PER_RUN)
 
   let currentSubject = ''
   let currentLevel = ''
@@ -122,8 +128,8 @@ async function main() {
   let errorCount = 0
 
   // Process subtopics in batches
-  for (let i = 0; i < pendingSubtopics.length; i += CONCURRENT_SUBTOPICS) {
-    const batch = pendingSubtopics.slice(i, i + CONCURRENT_SUBTOPICS)
+  for (let i = 0; i < subtopicsToProcess.length; i += CONCURRENT_SUBTOPICS) {
+    const batch = subtopicsToProcess.slice(i, i + CONCURRENT_SUBTOPICS)
 
     // Log subject/level changes
     for (const subtopic of batch) {
@@ -154,11 +160,11 @@ async function main() {
     saveCheckpoint(checkpoint)
 
     // Progress update
-    const progress = ((i + batch.length) / pendingSubtopics.length * 100).toFixed(1)
-    console.log(`\nProgress: ${progress}% (${i + batch.length}/${pendingSubtopics.length})`)
+    const progress = ((i + batch.length) / subtopicsToProcess.length * 100).toFixed(1)
+    console.log(`\nProgress: ${progress}% (${i + batch.length}/${subtopicsToProcess.length})`)
 
     // Delay between batches
-    if (i + CONCURRENT_SUBTOPICS < pendingSubtopics.length) {
+    if (i + CONCURRENT_SUBTOPICS < subtopicsToProcess.length) {
       console.log(`Waiting ${DELAY_BETWEEN_BATCHES_MS}ms before next batch...`)
       await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES_MS))
     }
