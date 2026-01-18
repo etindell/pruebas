@@ -28,34 +28,88 @@ interface SubtopicData {
   nextLessonId: string | null
 }
 
+interface TestEligibility {
+  eligible: boolean
+  lessonsCompleted: number
+  lessonsTotal: number
+  questionsAnswered: number
+  testNumber: number | 'practice'
+  difficultyLevel: number
+  questionsUntilPass: number
+  trailing40Score: number
+  passed: boolean
+}
+
 export default function SubtopicLessonsPage() {
   const params = useParams()
   const router = useRouter()
   const { currentSubject } = useSubject()
   const [data, setData] = useState<SubtopicData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [testEligibility, setTestEligibility] = useState<TestEligibility | null>(null)
+  const [creatingTest, setCreatingTest] = useState(false)
+  const [testError, setTestError] = useState<string | null>(null)
 
   const theme = currentSubject ? getSubjectTheme(currentSubject.name) : null
 
   useEffect(() => {
-    async function fetchLessons() {
+    async function fetchData() {
       try {
-        const res = await fetch(`/api/subtopics/${params.id}/lessons`)
-        if (res.ok) {
-          const result = await res.json()
+        const [lessonsRes, eligibilityRes] = await Promise.all([
+          fetch(`/api/subtopics/${params.id}/lessons`),
+          fetch(`/api/subtopics/${params.id}/test-eligibility`),
+        ])
+
+        if (lessonsRes.ok) {
+          const result = await lessonsRes.json()
           setData(result)
         }
+
+        if (eligibilityRes.ok) {
+          const eligibility = await eligibilityRes.json()
+          setTestEligibility(eligibility)
+        }
       } catch (error) {
-        console.error('Failed to fetch lessons:', error)
+        console.error('Failed to fetch data:', error)
       } finally {
         setLoading(false)
       }
     }
 
     if (params.id) {
-      fetchLessons()
+      fetchData()
     }
   }, [params.id])
+
+  async function startTest() {
+    if (!params.id) return
+    setCreatingTest(true)
+    setTestError(null)
+
+    try {
+      const res = await fetch('/api/quizzes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtopicId: params.id,
+          questionCount: 10,
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        router.push(`/quiz/${data.quiz.id}/take`)
+      } else {
+        const errorData = await res.json()
+        setTestError(errorData.error || 'Failed to create test')
+      }
+    } catch (error) {
+      console.error('Failed to create test:', error)
+      setTestError('Failed to create test')
+    } finally {
+      setCreatingTest(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -191,6 +245,109 @@ export default function SubtopicLessonsPage() {
           </div>
         )}
       </div>
+
+      {/* Subtopic Test Section */}
+      {testEligibility && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Subtopic Test</h2>
+
+          {testError && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+              {testError}
+            </div>
+          )}
+
+          {testEligibility.passed ? (
+            <div className="text-center py-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-green-600 mb-2">Subtopic Passed!</h3>
+              <p className="text-gray-600 mb-4">
+                You&apos;ve answered {testEligibility.questionsAnswered} questions with a {testEligibility.trailing40Score}% score.
+              </p>
+              <button
+                onClick={startTest}
+                disabled={creatingTest}
+                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50"
+              >
+                {creatingTest ? 'Creating...' : 'Practice More'}
+              </button>
+            </div>
+          ) : testEligibility.eligible ? (
+            <div>
+              {/* Progress towards 40 questions */}
+              <div className="mb-4">
+                <div className="flex justify-between text-sm text-gray-600 mb-1">
+                  <span>Test Progress</span>
+                  <span>{testEligibility.questionsAnswered}/40 questions</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="h-2 rounded-full transition-all bg-blue-500"
+                    style={{ width: `${Math.min(100, (testEligibility.questionsAnswered / 40) * 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Current score if they have answered questions */}
+              {testEligibility.questionsAnswered > 0 && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Current Score (last 40)</span>
+                    <span className={`text-lg font-bold ${testEligibility.trailing40Score > 90 ? 'text-green-600' : 'text-gray-700'}`}>
+                      {testEligibility.trailing40Score}%
+                    </span>
+                  </div>
+                  {testEligibility.questionsUntilPass > 0 && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Answer {testEligibility.questionsUntilPass} more questions and score &gt;90% to pass
+                    </p>
+                  )}
+                  {testEligibility.questionsUntilPass === 0 && testEligibility.trailing40Score <= 90 && (
+                    <p className="text-xs text-orange-600 mt-1">
+                      Score needs to be above 90% to pass
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={startTest}
+                disabled={creatingTest}
+                className="w-full py-3 px-4 rounded-lg text-white font-medium transition"
+                style={{ backgroundColor: theme?.primary || '#2563eb' }}
+              >
+                {creatingTest
+                  ? 'Creating Test...'
+                  : testEligibility.testNumber === 'practice'
+                  ? 'Take Practice Test'
+                  : `Take Test ${testEligibility.testNumber} (Difficulty ${testEligibility.difficultyLevel}/4)`}
+              </button>
+              <p className="text-xs text-gray-500 text-center mt-2">
+                10 questions per test
+              </p>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Test Locked</h3>
+              <p className="text-gray-600 mb-2">
+                Complete all lessons to unlock the subtopic test.
+              </p>
+              <p className="text-sm text-gray-500">
+                {testEligibility.lessonsCompleted} of {testEligibility.lessonsTotal} lessons completed
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -23,6 +23,8 @@ interface GenerateQuizParams {
   level: string
   topic: string
   questionCount: number
+  excludeQuestions?: string[]  // Previously asked question texts to avoid
+  difficultyLevel?: number     // 1-4 difficulty scale
 }
 
 export class TopicOutOfLevelError extends Error {
@@ -34,6 +36,49 @@ export class TopicOutOfLevelError extends Error {
     this.name = 'TopicOutOfLevelError'
     this.reason = reason
     this.suggestedTopic = suggestedTopic
+  }
+}
+
+/**
+ * Returns difficulty instructions based on the level (1-4)
+ */
+function getDifficultyInstructions(level: number): string {
+  switch (level) {
+    case 1:
+      return `DIFFICULTY LEVEL 1 - FOUNDATIONAL:
+- Focus on basic recall and recognition
+- Questions should be straightforward with clear, unambiguous answers
+- Use simple, direct language
+- Test one concept at a time
+- Avoid tricky wording or complex scenarios`
+
+    case 2:
+      return `DIFFICULTY LEVEL 2 - DEVELOPING:
+- Include simple application of concepts
+- Questions may combine two related concepts
+- Introduce basic problem-solving scenarios
+- Some questions may require a single step of reasoning
+- Still avoid overly complex wording`
+
+    case 3:
+      return `DIFFICULTY LEVEL 3 - PROFICIENT:
+- Include word problems and real-world applications
+- Questions should require multi-step thinking
+- Combine multiple concepts in meaningful ways
+- Include some analysis and comparison questions
+- Require deeper understanding beyond memorization`
+
+    case 4:
+      return `DIFFICULTY LEVEL 4 - ADVANCED:
+- Focus on complex reasoning and critical thinking
+- Include nuanced scenarios with subtle distinctions
+- Questions may require synthesis of multiple concepts
+- Include some questions where wrong answers are plausible
+- Test ability to apply knowledge in novel situations
+- May include questions about edge cases or exceptions`
+
+    default:
+      return getDifficultyInstructions(1)
   }
 }
 
@@ -75,6 +120,8 @@ export async function generateQuiz({
   level,
   topic,
   questionCount,
+  excludeQuestions,
+  difficultyLevel,
 }: GenerateQuizParams): Promise<Question[]> {
   // First, validate that the topic is appropriate for the level
   const validation = await validateTopicForLevel(subject, level, topic)
@@ -83,12 +130,32 @@ export async function generateQuiz({
     throw new TopicOutOfLevelError(validation.reason, validation.suggested_topic)
   }
 
+  // Build exclusion instructions if there are questions to avoid
+  let exclusionInstructions = ''
+  if (excludeQuestions && excludeQuestions.length > 0) {
+    const recentExamples = excludeQuestions.slice(-20) // Show last 20 as examples
+    exclusionInstructions = `
+IMPORTANT - AVOID DUPLICATE QUESTIONS:
+The student has already been asked ${excludeQuestions.length} questions on this topic.
+DO NOT generate questions that are similar to or cover the same concept as these recent examples:
+${recentExamples.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+Generate COMPLETELY NEW questions that test different aspects of the topic.
+`
+  }
+
+  // Get difficulty instructions if specified
+  const difficultyInstructions = difficultyLevel
+    ? `\n${getDifficultyInstructions(difficultyLevel)}\n`
+    : ''
+
   const prompt = `Generate a ${questionCount}-question multiple choice quiz.
 
 Subject: ${subject}
 Level: ${level}
 Topic: ${topic}
-
+${difficultyInstructions}
+${exclusionInstructions}
 IMPORTANT INSTRUCTIONS:
 - All questions MUST be appropriate for ${level} level students
 - If the topic mentions a different grade level (e.g., "8th grade algebra"), IGNORE that and generate questions at ${level} difficulty

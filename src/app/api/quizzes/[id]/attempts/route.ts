@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import { hashQuestion } from '@/lib/question-hash'
 
 interface Answer {
   question_id: string
@@ -10,6 +11,7 @@ interface Answer {
 
 interface Question {
   id: string
+  question: string
   correct_answer: string
 }
 
@@ -146,13 +148,27 @@ export async function POST(
 
     // If this quiz is linked to a subtopic, record SubtopicQuestion entries for progress tracking
     if (quiz.subtopicId) {
-      const subtopicQuestions = processedAnswers.map((answer) => ({
-        subtopicId: quiz.subtopicId!,
-        userId,
-        questionId: answer.question_id,
-        quizId: id,
-        isCorrect: answer.is_correct,
-      }))
+      // Parse quiz data to get difficulty level
+      const quizData = JSON.parse(quiz.questions) as { questions: Question[]; difficultyLevel?: number }
+      const difficultyLevel = quizData.difficultyLevel || 1
+
+      const subtopicQuestions = processedAnswers.map((answer) => {
+        // Find the question to get its text
+        const question = questions.find((q) => q.id === answer.question_id)
+        const questionText = question?.question || ''
+        const questionHash = questionText ? hashQuestion(questionText) : null
+
+        return {
+          subtopicId: quiz.subtopicId!,
+          userId,
+          questionId: answer.question_id,
+          quizId: id,
+          isCorrect: answer.is_correct,
+          questionText,
+          questionHash,
+          difficultyLevel,
+        }
+      })
 
       await prisma.subtopicQuestion.createMany({
         data: subtopicQuestions,

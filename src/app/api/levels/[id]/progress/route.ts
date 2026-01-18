@@ -10,6 +10,9 @@ interface SubtopicScore {
   passed: boolean
   totalLessons: number
   completedLessons: number
+  questionsUntilPass: number
+  testNumber: number | 'practice'
+  difficultyLevel: number
 }
 
 // Calculate trailing 40 question score for a subtopic
@@ -102,7 +105,12 @@ export async function GET(
     // Calculate trailing-40 scores and lesson progress for each subtopic
     const subtopicScores: SubtopicScore[] = await Promise.all(
       level.subtopics.map(async (subtopic) => {
-        const { score, count } = await getTrailing40Score(userId, subtopic.id)
+        // Get total questions answered for this subtopic (not just last 40)
+        const totalQuestionsAnswered = await prisma.subtopicQuestion.count({
+          where: { userId, subtopicId: subtopic.id },
+        })
+
+        const { score } = await getTrailing40Score(userId, subtopic.id)
 
         // Get lesson counts
         const totalLessons = await prisma.lesson.count({
@@ -117,14 +125,25 @@ export async function GET(
           },
         })
 
+        // Pass requires: at least 40 questions AND score > 90%
+        const passed = totalQuestionsAnswered >= 40 && score > 90
+
+        // Calculate test number and difficulty
+        const questionsUntilPass = Math.max(0, 40 - totalQuestionsAnswered)
+        const testNumber = totalQuestionsAnswered >= 40 ? 'practice' as const : Math.floor(totalQuestionsAnswered / 10) + 1
+        const difficultyLevel = Math.min(4, Math.floor(totalQuestionsAnswered / 10) + 1)
+
         return {
           id: subtopic.id,
           name: subtopic.name,
           score,
-          questionsAnswered: count,
-          passed: score > 90,
+          questionsAnswered: totalQuestionsAnswered,
+          passed,
           totalLessons,
           completedLessons,
+          questionsUntilPass,
+          testNumber,
+          difficultyLevel,
         }
       })
     )

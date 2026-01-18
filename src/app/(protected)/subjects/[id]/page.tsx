@@ -31,6 +31,9 @@ interface SubtopicScore {
   passed: boolean
   totalLessons: number
   completedLessons: number
+  questionsUntilPass: number
+  testNumber: number | 'practice'
+  difficultyLevel: number
 }
 
 interface Progress {
@@ -65,6 +68,7 @@ export default function SubjectPage() {
   const [customTopic, setCustomTopic] = useState('')
   const [customQuestionCount, setCustomQuestionCount] = useState(10)
   const [creatingCustomQuiz, setCreatingCustomQuiz] = useState(false)
+  const [testError, setTestError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchData() {
@@ -145,8 +149,9 @@ export default function SubjectPage() {
     }
   }
 
-  async function startSubtopicQuiz(subtopicId: string) {
+  async function startSubtopicTest(subtopicId: string) {
     setCreatingQuiz(subtopicId)
+    setTestError(null)
     try {
       const res = await fetch('/api/quizzes', {
         method: 'POST',
@@ -160,9 +165,17 @@ export default function SubjectPage() {
       if (res.ok) {
         const data = await res.json()
         router.push(`/quiz/${data.quiz.id}/take`)
+      } else {
+        const data = await res.json()
+        if (data.error === 'Complete all lessons first') {
+          setTestError(`Complete all lessons first (${data.lessonsCompleted}/${data.lessonsTotal})`)
+        } else {
+          setTestError(data.error || 'Failed to create test')
+        }
       }
     } catch (error) {
-      console.error('Failed to create quiz:', error)
+      console.error('Failed to create test:', error)
+      setTestError('Failed to create test')
     } finally {
       setCreatingQuiz(null)
     }
@@ -356,7 +369,7 @@ export default function SubjectPage() {
               ></div>
             </div>
           </div>
-          <p className="text-xs text-gray-500">Pass a subtopic by scoring &gt;90% on your last 40 questions</p>
+          <p className="text-xs text-gray-500">Pass a subtopic by answering 40 questions AND scoring &gt;90% on your last 40</p>
         </div>
       )}
 
@@ -365,7 +378,7 @@ export default function SubjectPage() {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Progress Over Time</h2>
           <div className="h-40 flex items-end space-x-1">
-            {levelProgress.dailyHistory.map((day, i) => (
+            {levelProgress.dailyHistory.map((day) => (
               <div key={day.date} className="flex-1 flex flex-col items-center">
                 <div
                   className="w-full bg-blue-500 rounded-t transition-all duration-300"
@@ -387,86 +400,114 @@ export default function SubjectPage() {
       {levelProgress && levelProgress.subtopics.length > 0 && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Subtopics</h2>
+          {testError && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+              {testError}
+            </div>
+          )}
           <div className="space-y-3">
-            {levelProgress.subtopics.map((subtopic) => (
-              <div
-                key={subtopic.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-              >
-                <div className="flex items-center space-x-3 flex-1 min-w-0">
-                  <span className={subtopic.passed ? 'text-green-500' : 'text-gray-300'}>
-                    {subtopic.passed ? (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </span>
-                  <span className="font-medium text-gray-900 truncate">{subtopic.name}</span>
-                </div>
+            {levelProgress.subtopics.map((subtopic) => {
+              const lessonsComplete = subtopic.totalLessons === 0 || subtopic.completedLessons === subtopic.totalLessons
+              const testButtonText = subtopic.passed
+                ? 'Practice'
+                : subtopic.testNumber === 'practice'
+                ? 'Practice'
+                : `Test ${subtopic.testNumber}`
 
-                <div className="flex items-center space-x-4">
-                  {/* Lesson Progress */}
-                  {subtopic.totalLessons > 0 && (
-                    <div className="text-xs text-gray-500 w-16 text-center">
-                      <span className={subtopic.completedLessons === subtopic.totalLessons ? 'text-green-600 font-medium' : ''}>
-                        {subtopic.completedLessons}/{subtopic.totalLessons}
-                      </span>
-                      <br />lessons
-                    </div>
-                  )}
-
-                  {/* Quiz Score */}
-                  <div className="w-24 flex items-center space-x-2">
-                    <div className="flex-1 bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          subtopic.passed
-                            ? 'bg-green-500'
-                            : subtopic.score >= 70
-                            ? 'bg-yellow-500'
-                            : 'bg-gray-400'
-                        }`}
-                        style={{ width: `${subtopic.score}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-sm font-medium text-gray-700 w-10 text-right">
-                      {subtopic.score}%
+              return (
+                <div
+                  key={subtopic.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <span className={subtopic.passed ? 'text-green-500' : 'text-gray-300'}>
+                      {subtopic.passed ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm0-2a6 6 0 100-12 6 6 0 000 12z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      )}
                     </span>
+                    <div className="min-w-0">
+                      <span className="font-medium text-gray-900 truncate block">{subtopic.name}</span>
+                      {!subtopic.passed && subtopic.questionsAnswered > 0 && (
+                        <span className="text-xs text-gray-500">
+                          {subtopic.questionsAnswered}/40 questions
+                          {subtopic.questionsUntilPass > 0 && ` (${subtopic.questionsUntilPass} more needed)`}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-4">
+                    {/* Lesson Progress */}
                     {subtopic.totalLessons > 0 && (
-                      <Link
-                        href={`/subtopics/${subtopic.id}/lessons`}
-                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                      >
-                        Learn
-                      </Link>
+                      <div className="text-xs text-gray-500 w-16 text-center">
+                        <span className={lessonsComplete ? 'text-green-600 font-medium' : ''}>
+                          {subtopic.completedLessons}/{subtopic.totalLessons}
+                        </span>
+                        <br />lessons
+                      </div>
                     )}
-                    <button
-                      onClick={() => startSubtopicQuiz(subtopic.id)}
-                      disabled={creatingQuiz === subtopic.id}
-                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {creatingQuiz === subtopic.id ? '...' : 'Quiz'}
-                    </button>
+
+                    {/* Test Score */}
+                    <div className="w-24 flex items-center space-x-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            subtopic.passed
+                              ? 'bg-green-500'
+                              : subtopic.score >= 70
+                              ? 'bg-yellow-500'
+                              : 'bg-gray-400'
+                          }`}
+                          style={{ width: `${subtopic.score}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 w-10 text-right">
+                        {subtopic.score}%
+                      </span>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center space-x-2">
+                      {subtopic.totalLessons > 0 && (
+                        <Link
+                          href={`/subtopics/${subtopic.id}/lessons`}
+                          className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                        >
+                          Learn
+                        </Link>
+                      )}
+                      {lessonsComplete ? (
+                        <button
+                          onClick={() => startSubtopicTest(subtopic.id)}
+                          disabled={creatingQuiz === subtopic.id}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {creatingQuiz === subtopic.id ? '...' : testButtonText}
+                        </button>
+                      ) : (
+                        <span className="px-3 py-1 bg-gray-300 text-gray-500 text-sm rounded cursor-not-allowed" title="Complete all lessons first">
+                          Test
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -522,10 +563,10 @@ export default function SubjectPage() {
           Generate Lesson
         </Link>
         <Link
-          href={`/browse?subjectId=${subjectId}`}
+          href="/select-subject"
           className="border border-gray-300 py-3 px-4 rounded-lg text-center hover:bg-gray-50"
         >
-          Browse All Quizzes
+          Switch Subject
         </Link>
       </div>
     </div>

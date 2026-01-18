@@ -3,6 +3,14 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { generateQuiz, TopicOutOfLevelError } from '@/lib/quiz-generator'
 
+/**
+ * Calculate difficulty level based on questions answered (1-4)
+ */
+function calculateDifficultyLevel(questionsAnswered: number): number {
+  // Level 1: 0-9 questions, Level 2: 10-19, Level 3: 20-29, Level 4: 30+
+  return Math.min(4, Math.floor(questionsAnswered / 10) + 1)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -75,7 +83,7 @@ export async function POST(request: NextRequest) {
 
     // Validate inputs - either subtopicId or (subjectId + levelId + topicName) required
     if (subtopicId) {
-      // Subtopic quiz - fetch subtopic details
+      // Subtopic test - fetch subtopic details with lessons
       const subtopic = await prisma.subtopic.findUnique({
         where: { id: subtopicId },
         include: {
@@ -84,6 +92,7 @@ export async function POST(request: NextRequest) {
               subject: true,
             },
           },
+          lessons: true,
         },
       })
 
@@ -91,17 +100,60 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid subtopic' }, { status: 400 })
       }
 
+      // Check if all lessons are completed (required for subtopic tests)
+      if (subtopic.lessons.length > 0) {
+        const completedLessonsCount = await prisma.lessonProgress.count({
+          where: {
+            userId: session.userId,
+            lessonId: { in: subtopic.lessons.map(l => l.id) },
+            completed: true,
+          },
+        })
+
+        if (completedLessonsCount < subtopic.lessons.length) {
+          return NextResponse.json(
+            {
+              error: 'Complete all lessons first',
+              lessonsCompleted: completedLessonsCount,
+              lessonsTotal: subtopic.lessons.length,
+            },
+            { status: 400 }
+          )
+        }
+      }
+
       const count = questionCount || 10
       if (count < 10 || count > 20) {
         return NextResponse.json({ error: 'Question count must be 10-20' }, { status: 400 })
       }
 
-      // Generate quiz using subtopic's fixed prompt
+      // Get previously answered questions for this subtopic (for exclusion)
+      const previousQuestions = await prisma.subtopicQuestion.findMany({
+        where: {
+          userId: session.userId,
+          subtopicId,
+          questionText: { not: null },
+        },
+        select: { questionText: true },
+        orderBy: { answeredAt: 'desc' },
+      })
+
+      const excludeQuestions = previousQuestions
+        .map(q => q.questionText)
+        .filter((text): text is string => text !== null)
+
+      // Calculate difficulty based on questions answered
+      const questionsAnswered = previousQuestions.length
+      const difficultyLevel = calculateDifficultyLevel(questionsAnswered)
+
+      // Generate quiz using subtopic's fixed prompt with exclusions and difficulty
       const questions = await generateQuiz({
         subject: subtopic.level.subject.name,
         level: subtopic.level.name,
         topic: subtopic.prompt,
         questionCount: count,
+        excludeQuestions,
+        difficultyLevel,
       })
 
       // Create category with subtopic name as topic
@@ -119,7 +171,7 @@ export async function POST(request: NextRequest) {
         data: {
           categoryId: category.id,
           subtopicId: subtopic.id,
-          questions: JSON.stringify({ questions }),
+          questions: JSON.stringify({ questions, difficultyLevel }),
           questionCount: count,
           timeLimitMinutes: timeLimitMinutes || null,
           createdBy: session.userId,
@@ -135,7 +187,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      return NextResponse.json({ quiz })
+      return NextResponse.json({ quiz, difficultyLevel, questionsAnswered })
     } else {
       // Custom quiz - use provided topic
       if (!subjectId || !levelId || !topicName) {

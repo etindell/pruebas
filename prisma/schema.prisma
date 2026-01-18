@@ -198,18 +198,22 @@ model Subtopic {
 }
 
 model SubtopicQuestion {
-  id         String   @id @default(uuid())
-  subtopicId String   @map("subtopic_id")
-  userId     String   @map("user_id")
-  questionId String   @map("question_id") // e.g., "q1", "q2" within a quiz
-  quizId     String   @map("quiz_id")
-  isCorrect  Boolean  @map("is_correct")
-  answeredAt DateTime @default(now()) @map("answered_at")
+  id              String   @id @default(uuid())
+  subtopicId      String   @map("subtopic_id")
+  userId          String   @map("user_id")
+  questionId      String   @map("question_id") // e.g., "q1", "q2" within a quiz
+  quizId          String   @map("quiz_id")
+  isCorrect       Boolean  @map("is_correct")
+  answeredAt      DateTime @default(now()) @map("answered_at")
+  questionHash    String?  @map("question_hash")      // SHA-256 hash for deduplication
+  questionText    String?  @map("question_text")      // Full question text
+  difficultyLevel Int      @default(1) @map("difficulty_level") // 1-4 scale
 
   subtopic Subtopic @relation(fields: [subtopicId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, subtopicId, answeredAt])
+  @@index([userId, subtopicId, questionHash])
   @@map("subtopic_questions")
 }
 
