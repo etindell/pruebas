@@ -4,8 +4,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
-// Use Sonnet for cost-effective SVG generation (~$0.0225 per diagram)
-export const SVG_MODEL = 'claude-sonnet-4-20250514'
+// Use Opus for higher quality SVG generation (~$0.1125 per diagram)
+export const SVG_MODEL = 'claude-opus-4-20250514'
 
 export interface DiagramType {
   name: string
